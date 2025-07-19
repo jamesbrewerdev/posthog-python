@@ -75,7 +75,7 @@ class Consumer(Thread):
 
     def upload(self):
         """Upload the next batch of items, return whether successful."""
-        selg.log.debug("consumer upload called")
+        self.log.debug("consumer upload called")
         success = False
         batch = self.next()
         if len(batch) == 0:
