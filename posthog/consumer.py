@@ -60,11 +60,14 @@ class Consumer(Thread):
 
     def run(self):
         """Runs the consumer."""
-        self.log.debug("consumer is running...")
-        while self.running:
-            self.upload()
+        try:
+            self.log.debug("consumer is running...")
+            while self.running:
+                self.upload()
 
-        self.log.debug("consumer exited.")
+            self.log.debug("consumer exited.")
+        finally:
+            self.log.debug("consumer finally.")
 
     def pause(self):
         """Pause the consumer."""
@@ -72,12 +75,15 @@ class Consumer(Thread):
 
     def upload(self):
         """Upload the next batch of items, return whether successful."""
+        selg.log.debug("consumer upload called")
         success = False
         batch = self.next()
         if len(batch) == 0:
+            self.log.debug("consumer upload exiting because batch is empty")
             return False
 
         try:
+            self.log.debug(f"consumer upload batch_size={len(batch)}")
             self.request(batch)
             success = True
         except Exception as e:
@@ -89,6 +95,7 @@ class Consumer(Thread):
             # mark items as acknowledged from queue
             for item in batch:
                 self.queue.task_done()
+            self.log.debug("upload returning")
             return success
 
     def next(self):
@@ -96,15 +103,20 @@ class Consumer(Thread):
         queue = self.queue
         items = []
 
+        self.log.debug("next() called, queue size: %d", queue.qsize())
         start_time = time.monotonic()
         total_size = 0
 
         while len(items) < self.flush_at:
             elapsed = time.monotonic() - start_time
+            self.log.debug("elapsed: %.3f, flush_interval: %.3f", elapsed, self.flush_interval)
             if elapsed >= self.flush_interval:
+                self.log.debug("breaking due to time limit")
                 break
             try:
+                self.log.debug("calling queue.get()")
                 item = queue.get(block=True, timeout=self.flush_interval - elapsed)
+                self.log.debug("got item from queue")
                 item_size = len(json.dumps(item, cls=DatetimeSerializer).encode())
                 if item_size > MAX_MSG_SIZE:
                     self.log.error(
@@ -118,6 +130,8 @@ class Consumer(Thread):
                     break
             except Empty:
                 break
+
+        self.log.debug(f"consumer next returning batch_size={len(items)}")
 
         return items
 
@@ -149,4 +163,5 @@ class Consumer(Thread):
                 historical_migration=self.historical_migration,
             )
 
+        self.log.debug("consumer request attempting to send request")
         send_request()
